@@ -11,6 +11,7 @@ def main():
 
     # Create the tokenizer with the custom pattern
     tokenizer = RegexpTokenizer(args.pattern)
+<<<<<<< HEAD
     tokens = tokenizer.tokenize(args.text)  # Tokenize the input text
 
     # Print the tokens
@@ -19,3 +20,9 @@ def main():
 if __name__ == "__main__":
     main()
 
+=======
+    print(tokenizer.tokenize(args.text))  # Tokenize the input text
+
+if __name__ == "__main__":
+    main()
+>>>>>>> 3630eee060db80ff45abcb97639f7e0dfef8b863
