@@ -30,4 +30,4 @@ def test_missing_tokenizer_raises_error():
         controller.run(doc)
         assert False, "Expected InvalidPipelineError"
     except InvalidPipelineError as e:
-        assert "TaggerStep cannot run" in str(e)
+        assert "Pipeline starts with TaggerStep" in str(e)
