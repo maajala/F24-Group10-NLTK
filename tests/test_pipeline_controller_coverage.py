@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import MagicMock
-from src.pipeline.pipeline import Pipeline, PipelineController
-from src.pipeline.steps import PipelineStep, TokenizerStep, TaggerStep, ParserStep
-from src.pipeline.document import TextDocument
-from src.pipeline.errors import InvalidPipelineError
+from pipeline.pipeline import Pipeline, PipelineController
+from pipeline.steps import PipelineStep, TokenizerStep, TaggerStep, ParserStep
+from pipeline.document import TextDocument
+from pipeline.errors import InvalidPipelineError
 
 class TestPipelineControllerCoverage(unittest.TestCase):
     """
