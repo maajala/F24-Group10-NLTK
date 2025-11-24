@@ -1,5 +1,5 @@
 import unittest
-from src.tagger.simple_unigram_tagger import UnigramTagger  # Correct import
+from tagger.simple_unigram_tagger import UnigramTagger  # Correct import
 
 class TestUnigramTagger(unittest.TestCase):
 
