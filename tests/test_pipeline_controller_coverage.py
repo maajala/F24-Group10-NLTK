@@ -5,142 +5,152 @@ from pipeline.steps import PipelineStep, TokenizerStep, TaggerStep, ParserStep
 from pipeline.document import TextDocument
 from pipeline.errors import InvalidPipelineError
 
+
 class TestPipelineControllerCoverage(unittest.TestCase):
     """
-    Advanced White Box Testing for PipelineController.
-    Goal: Achieve 100% Branch Coverage by exercising all validation logic and error handling.
+    Comprehensive white-box testing for PipelineController to achieve full
+    branch and line coverage of pipeline validation and execution logic.
     """
 
     def setUp(self):
         self.doc = TextDocument("Test text")
-        # Create mocks for steps
-        self.mock_tokenizer = MagicMock(spec=TokenizerStep)
-        self.mock_tagger = MagicMock(spec=TaggerStep)
-        self.mock_parser = MagicMock(spec=ParserStep)
-        # Ensure isinstance checks work by mocking the class logic if necessary, 
-        # or simply using the real classes with mocked methods if specs fail.
-        # For this test, using instances of the real classes is safer for isinstance checks.
+
+        # Real step instances (for correct isinstance behavior)
         self.real_tokenizer = TokenizerStep(MagicMock())
         self.real_tagger = TaggerStep(MagicMock())
         self.real_parser = ParserStep(MagicMock())
 
+    # ----------------------------------------------------------------------
+    # VALIDATION TESTS
+    # ----------------------------------------------------------------------
+
     def test_validate_empty_pipeline(self):
-        """Test validation fails when pipeline has no steps."""
+        """Pipeline must not accept empty step lists."""
         pipeline = Pipeline([])
         controller = PipelineController(pipeline)
         with self.assertRaisesRegex(InvalidPipelineError, "Pipeline is empty"):
             controller.run(self.doc)
 
     def test_validate_multiple_tokenizers(self):
-        """Test validation fails with multiple TokenizerSteps."""
+        """Only one TokenizerStep allowed."""
         pipeline = Pipeline([self.real_tokenizer, self.real_tokenizer])
         controller = PipelineController(pipeline)
         with self.assertRaisesRegex(InvalidPipelineError, "multiple TokenizerStep"):
             controller.run(self.doc)
 
     def test_validate_multiple_taggers(self):
-        """Test validation fails with multiple TaggerSteps."""
+        """Only one TaggerStep allowed."""
         pipeline = Pipeline([self.real_tagger, self.real_tagger])
         controller = PipelineController(pipeline)
         with self.assertRaisesRegex(InvalidPipelineError, "multiple TaggerStep"):
             controller.run(self.doc)
 
     def test_validate_multiple_parsers(self):
-        """Test validation fails with multiple ParserSteps."""
+        """Only one ParserStep allowed."""
         pipeline = Pipeline([self.real_parser, self.real_parser])
         controller = PipelineController(pipeline)
         with self.assertRaisesRegex(InvalidPipelineError, "multiple ParserStep"):
             controller.run(self.doc)
 
     def test_validate_order_tokenizer_after_tagger(self):
-        """Test validation fails if Tokenizer comes after Tagger."""
+        """Tokenizer must come before Tagger."""
+        self.doc.tokens = ["tokens"]  # prevent first-step failure
         pipeline = Pipeline([self.real_tagger, self.real_tokenizer])
         controller = PipelineController(pipeline)
-        # Note: We must ensure doc has tokens so it doesn't fail the 'first step' check
-        self.doc.tokens = ["some", "tokens"] 
         with self.assertRaisesRegex(InvalidPipelineError, "TokenizerStep must come before TaggerStep"):
             controller.run(self.doc)
 
     def test_validate_order_tokenizer_after_parser(self):
-        """Test validation fails if Tokenizer comes after Parser."""
+        """Tokenizer must come before Parser."""
+        self.doc.tokens = ["tokens"]
+        self.doc.tags = [("t", "TAG")]
         pipeline = Pipeline([self.real_parser, self.real_tokenizer])
         controller = PipelineController(pipeline)
-        self.doc.tokens = ["tokens"]
-        self.doc.tags = [("token", "tag")]
         with self.assertRaisesRegex(InvalidPipelineError, "TokenizerStep must come before ParserStep"):
             controller.run(self.doc)
 
     def test_validate_order_tagger_after_parser(self):
-        """Test validation fails if Tagger comes after Parser."""
+        """Tagger must come before Parser."""
+        self.doc.tokens = ["tokens"]
+        self.doc.tags = [("t", "TAG")]
         pipeline = Pipeline([self.real_parser, self.real_tagger])
         controller = PipelineController(pipeline)
-        self.doc.tokens = ["tokens"]
-        self.doc.tags = [("token", "tag")]
         with self.assertRaisesRegex(InvalidPipelineError, "TaggerStep must come before ParserStep"):
             controller.run(self.doc)
 
     def test_validate_first_step_tagger_no_tokens(self):
-        """Test validation fails if first step is Tagger but doc has no tokens."""
+        """Cannot start with Tagger if document has no tokens."""
+        self.doc.tokens = []
         pipeline = Pipeline([self.real_tagger])
         controller = PipelineController(pipeline)
-        self.doc.tokens = [] # Empty tokens
-        with self.assertRaisesRegex(InvalidPipelineError, "Pipeline starts with TaggerStep, but TextDocument.tokens is empty"):
+        with self.assertRaisesRegex(InvalidPipelineError, "Pipeline starts with TaggerStep"):
             controller.run(self.doc)
 
     def test_validate_first_step_parser_no_data(self):
-        """Test validation fails if first step is Parser but doc has no tokens/tags."""
-        pipeline = Pipeline([self.real_parser])
-        controller = PipelineController(pipeline)
+        """Cannot start with Parser if document has no tokens or tags."""
         self.doc.tokens = []
         self.doc.tags = []
-        with self.assertRaisesRegex(InvalidPipelineError, "Pipeline starts with ParserStep, but TextDocument has no tokens"):
+        pipeline = Pipeline([self.real_parser])
+        controller = PipelineController(pipeline)
+        with self.assertRaisesRegex(InvalidPipelineError, "Pipeline starts with ParserStep"):
             controller.run(self.doc)
 
     def test_validate_missing_tokenizer_gap(self):
-        """Test validation fails if Tagger is present without a Tokenizer, and doc is empty."""
-        # Create a dummy step to be first, so Tagger is second, triggering the 'no tokenizer' check logic
+        """
+        If a Tagger appears in the pipeline without a Tokenizer before it,
+        the pipeline must reject the configuration.
+        """
         class DummyStep(PipelineStep):
             def process(self, doc): pass
-        
+
+        self.doc.tokens = []  # ensure missing-tokenization failure
         pipeline = Pipeline([DummyStep(), self.real_tagger])
         controller = PipelineController(pipeline)
-        self.doc.tokens = []
-        with self.assertRaisesRegex(InvalidPipelineError, "No TokenizerStep in pipeline, but a TaggerStep is present"):
+        with self.assertRaisesRegex(InvalidPipelineError, "No TokenizerStep in pipeline"):
             controller.run(self.doc)
 
+    # ----------------------------------------------------------------------
+    # EXECUTION TESTS
+    # ----------------------------------------------------------------------
+
     def test_run_execution_success(self):
-        """Test successful execution of all steps."""
-        # Mock the process methods to verify they are called
+        """Successful pipelines should call each step exactly once."""
         t_mock = MagicMock(spec=TokenizerStep)
-        p_mock = MagicMock(spec=TaggerStep)
-        pipeline = Pipeline([t_mock, p_mock])
+        g_mock = MagicMock(spec=TaggerStep)
+
+        pipeline = Pipeline([t_mock, g_mock])
         controller = PipelineController(pipeline)
-        
+
         controller.run(self.doc)
+
         t_mock.process.assert_called_once_with(self.doc)
-        p_mock.process.assert_called_once_with(self.doc)
+        g_mock.process.assert_called_once_with(self.doc)
 
     def test_run_propagates_invalid_pipeline_error(self):
-        """Test that existing InvalidPipelineErrors are re-raised as-is."""
+        """Existing InvalidPipelineErrors must not be rewrapped."""
         step_mock = MagicMock(spec=TokenizerStep)
         step_mock.process.side_effect = InvalidPipelineError("Already descriptive")
-        
+
         pipeline = Pipeline([step_mock])
         controller = PipelineController(pipeline)
-        
+
         with self.assertRaisesRegex(InvalidPipelineError, "Already descriptive"):
             controller.run(self.doc)
 
     def test_run_wraps_generic_exception(self):
-        """Test that generic exceptions are wrapped in InvalidPipelineError."""
+        """
+        Any generic exception should be wrapped with step information.
+        Ensures full error-handling coverage.
+        """
         step_mock = MagicMock(spec=TokenizerStep)
         step_mock.process.side_effect = ValueError("Random crash")
-        
+
         pipeline = Pipeline([step_mock])
         controller = PipelineController(pipeline)
-        
-        with self.assertRaisesRegex(InvalidPipelineError, "Error in MagicMock: Random crash"):
+
+        with self.assertRaisesRegex(InvalidPipelineError, "Error in TokenizerStep: Random crash"):
             controller.run(self.doc)
+
 
 if __name__ == "__main__":
     unittest.main()
